@@ -8,6 +8,7 @@ use crate::{
 };
 use bitflags::bitflags;
 use crypto::{Crypto, CryptoBuf, Digest, EcdsaSig, HmacSig};
+use platform::plat_println;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, zerocopy::AsBytes, zerocopy::FromBytes)]
@@ -41,20 +42,21 @@ impl SignCmd {
         digest: &Digest,
     ) -> Result<EcdsaSig, DpeErrorCode> {
         let algs = DPE_PROFILE.alg_len();
+        plat_println!(&mut env.platform, "Getting CDI digest");
         let cdi_digest = dpe.compute_measurement_hash(env, idx)?;
         let cdi = env
             .crypto
             .derive_cdi(DPE_PROFILE.alg_len(), &cdi_digest, b"DPE")
-            .map_err(|_| DpeErrorCode::CryptoError)?;
+            .map_err(|_| {plat_println!(&mut env.platform, "Failed to get CDI"); DpeErrorCode::CryptoError})?;
         let (priv_key, pub_key) = env
             .crypto
             .derive_key_pair(algs, &cdi, &self.label, b"ECC")
-            .map_err(|_| DpeErrorCode::CryptoError)?;
+            .map_err(|_| {plat_println!(&mut env.platform, "Failed derive key pair"); DpeErrorCode::CryptoError})?;
 
         let sig = env
             .crypto
             .ecdsa_sign_with_derived(algs, digest, &priv_key, pub_key)
-            .map_err(|_| DpeErrorCode::CryptoError)?;
+            .map_err(|_| {plat_println!(&mut env.platform, "Failed to sign"); DpeErrorCode::CryptoError})?;
 
         Ok(sig)
     }
@@ -85,28 +87,36 @@ impl CommandExecution for SignCmd {
         env: &mut DpeEnv<impl DpeTypes>,
         locality: u32,
     ) -> Result<Response, DpeErrorCode> {
+        plat_println!(&mut env.platform, "In SignCommnad");
         // Make sure the operation is supported.
         if !dpe.support.is_symmetric() && self.uses_symmetric() {
+            plat_println!(&mut env.platform, "InvalidArgument");
             return Err(DpeErrorCode::InvalidArgument);
         }
 
         let idx = dpe.get_active_context_pos(&self.handle, locality)?;
         let context = &dpe.contexts[idx];
 
+        plat_println!(&mut env.platform, "Got Context");
         if context.context_type == ContextType::Simulation {
+            plat_println!(&mut env.platform, "InvalidArgument");
             return Err(DpeErrorCode::InvalidArgument);
         }
 
         let algs = DPE_PROFILE.alg_len();
-        let digest = Digest::new(&self.digest).map_err(|_| DpeErrorCode::InternalError)?;
+        let digest = Digest::new(&self.digest).map_err(|_| {
+            plat_println!(&mut env.platform, "Failed to get digest");DpeErrorCode::InternalError})?;
 
         let EcdsaSig { r, s } = if !self.uses_symmetric() {
+            plat_println!(&mut env.platform, "Signing with ECDSA");
             self.ecdsa_sign(dpe, env, idx, &digest)?
         } else {
+            plat_println!(&mut env.platform, "Signing with HMAC");
             let r = self.hmac_sign(dpe, env, idx, &digest)?;
             let s = CryptoBuf::default(algs);
             EcdsaSig { r, s }
         };
+        plat_println!(&mut env.platform, "Got sig");
 
         let sig_r_or_hmac: [u8; DPE_PROFILE.get_ecc_int_size()] = r
             .bytes()
@@ -121,6 +131,7 @@ impl CommandExecution for SignCmd {
         // Rotate the handle if it isn't the default context.
         dpe.roll_onetime_use_handle(env, idx)?;
 
+        plat_println!(&mut env.platform, "Got sig");
         Ok(Response::Sign(SignResp {
             new_context_handle: dpe.contexts[idx].handle,
             sig_r_or_hmac,
