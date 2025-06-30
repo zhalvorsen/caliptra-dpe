@@ -227,6 +227,7 @@ pub enum DpeErrorCode {
     InvalidCommand = 2,
     InvalidArgument = 3,
     ArgumentNotSupported = 4,
+    NotInitialized = 5,
     InvalidHandle = 0x1000,
     InvalidLocality = 0x1001,
     MaxTcis = 0x1003,

@@ -145,7 +145,7 @@ mod tests {
         CfiCounter::reset_for_test();
         let mut state = State::default();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         let handle = match InitCtxCmd::new_use_default()
             .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
@@ -177,7 +177,7 @@ mod tests {
 
         // Change to support simulation.
         *env.state = State::new(Support::SIMULATION, DpeFlags::empty());
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         // Try setting both flags.
         assert_eq!(

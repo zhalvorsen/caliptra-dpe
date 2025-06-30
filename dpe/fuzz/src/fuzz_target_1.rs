@@ -55,7 +55,7 @@ fn harness(data: &[u8]) {
         platform: DefaultPlatform(DefaultPlatformProfile::P256),
         state: &mut dpe::State::new(SUPPORT, DpeFlags::empty()),
     };
-    let mut dpe = DpeInstance::new(&mut env).unwrap();
+    let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
     trace!("----------------------------------");
     if let Ok(command) = dpe.deserialize_command(data) {
         trace!("| Fuzzer's locality requested {command:x?}");

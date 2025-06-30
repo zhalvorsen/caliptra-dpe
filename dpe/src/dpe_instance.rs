@@ -45,61 +45,63 @@ pub struct DpeInstance {
     pub profile: DpeProfile,
 }
 
+impl Default for DpeInstance {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DpeInstance {
     const MAX_NEW_HANDLE_ATTEMPTS: usize = 8;
 
-    /// Create a new DPE instance without initializing.
-    pub const fn initialized() -> Self {
+    /// Create a new DPE instance.
+    pub const fn new() -> Self {
         Self {
             profile: DPE_PROFILE,
         }
     }
 
-    /// Create a new DPE instance.
+    /// Initialize a DPE instance.
     ///
     /// # Arguments
     ///
     /// * `env` - DPE environment containing Crypto and Platform implementations
-    /// * `support` - optional functionality the instance supports
-    /// * `flags` - configures `Self` behaviors.
     #[cfg_attr(not(feature = "no-cfi"), cfi_impl_fn)]
-    pub fn new(env: &mut DpeEnv<impl DpeTypes>) -> Result<Self, DpeErrorCode> {
-        let mut dpe = Self::initialized();
-
+    #[allow(unused_mut)]
+    pub fn initialize(mut self, env: &mut DpeEnv<impl DpeTypes>) -> Result<Self, DpeErrorCode> {
         if env.state.support.auto_init() {
             let locality = env.platform.get_auto_init_locality()?;
-            InitCtxCmd::new_use_default().execute(&mut dpe, env, locality)?;
+            InitCtxCmd::new_use_default().execute(&mut self, env, locality)?;
         } else {
             #[cfg(not(feature = "no-cfi"))]
             cfi_assert!(!env.state.support.auto_init());
         }
-        Ok(dpe)
+        Ok(self)
     }
 
-    /// Create a new DPE instance auto-initialized with a measurement
+    /// Auto-initialize a DPE instance with a measurement.
+    ///
+    /// Must be called after `initialize`.
     ///
     /// # Arguments
     ///
     /// * `env` - DPE environment containing Crypto and Platform implementations
-    /// * `support` - optional functionality the instance supports
     /// * `tci_type`- tci_type of initialized context
     /// * `auto_init_measurement` - TCI data of initialized context
-    /// * `flags` - configures `Self` behaviors.
     #[cfg_attr(not(feature = "no-cfi"), cfi_impl_fn)]
     #[cfg(not(feature = "disable_auto_init"))]
-    pub fn new_auto_init(
+    pub fn with_measurement(
+        self,
         env: &mut DpeEnv<impl DpeTypes>,
         tci_type: u32,
         auto_init_measurement: [u8; DPE_PROFILE.hash_size()],
     ) -> Result<Self, DpeErrorCode> {
-        // auto-init must be supported to add an auto init measurement
-        if !env.state.support.auto_init() {
-            return Err(DpeErrorCode::ArgumentNotSupported);
+        if !env.state.has_initialized() {
+            return Err(DpeErrorCode::NotInitialized);
         } else {
             #[cfg(not(feature = "no-cfi"))]
-            cfi_assert!(env.state.support.auto_init());
+            cfi_assert!(env.state.has_initialized());
         }
-        let dpe = Self::new(env)?;
 
         let locality = env.platform.get_auto_init_locality()?;
         let idx = env
@@ -107,7 +109,7 @@ impl DpeInstance {
             .get_active_context_pos(&ContextHandle::default(), locality)?;
         let mut tmp_context = env.state.contexts[idx];
         // add measurement to auto-initialized context
-        dpe.add_tci_measurement(
+        self.add_tci_measurement(
             env,
             &mut tmp_context,
             &TciMeasurement(auto_init_measurement),
@@ -115,7 +117,7 @@ impl DpeInstance {
         )?;
         env.state.contexts[idx] = tmp_context;
         env.state.contexts[idx].tci.tci_type = tci_type;
-        Ok(dpe)
+        Ok(self)
     }
 
     pub fn get_profile(
@@ -441,7 +443,7 @@ pub mod tests {
         CfiCounter::reset_for_test();
         let mut state = test_state();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         assert_eq!(
             Response::GetProfile(GetProfileResp::new(
@@ -480,7 +482,7 @@ pub mod tests {
         CfiCounter::reset_for_test();
         let mut state = test_state();
         let mut env = test_env(&mut state);
-        let dpe = DpeInstance::new(&mut env).unwrap();
+        let dpe = DpeInstance::new().initialize(&mut env).unwrap();
         let profile = dpe
             .get_profile(&mut env.platform, env.state.support)
             .unwrap();
@@ -493,7 +495,7 @@ pub mod tests {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::AUTO_INIT, DpeFlags::empty());
         let mut env = test_env(&mut state);
-        let dpe = DpeInstance::new(&mut env).unwrap();
+        let dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         let data = [1; DPE_PROFILE.hash_size()];
         let mut context = env.state.contexts[0];
@@ -542,7 +544,7 @@ pub mod tests {
         CfiCounter::reset_for_test();
         let mut state = test_state();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         let mut last_cdi = vec![];
 
@@ -602,7 +604,7 @@ pub mod tests {
         CfiCounter::reset_for_test();
         let mut state = State::new(SUPPORT | Support::INTERNAL_INFO, DpeFlags::empty());
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         let parent_context_idx = env
             .state
@@ -666,7 +668,7 @@ pub mod tests {
         CfiCounter::reset_for_test();
         let mut state = State::new(SUPPORT | Support::INTERNAL_DICE, DpeFlags::empty());
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         let parent_context_idx = env
             .state
@@ -724,8 +726,11 @@ pub mod tests {
         let tci_type = 0xdeadbeef_u32;
         let auto_init_measurement = [0x1; DPE_PROFILE.hash_size()];
         let auto_init_locality = env.platform.get_auto_init_locality().unwrap();
-        let mut dpe =
-            DpeInstance::new_auto_init(&mut env, tci_type, auto_init_measurement).unwrap();
+        let mut dpe = DpeInstance::new()
+            .initialize(&mut env)
+            .unwrap()
+            .with_measurement(&mut env, tci_type, auto_init_measurement)
+            .unwrap();
 
         let idx = env
             .state

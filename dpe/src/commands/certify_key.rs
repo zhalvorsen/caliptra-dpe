@@ -225,7 +225,7 @@ mod tests {
             };
             let mut state = State::new(Support::X509, flags);
             let mut env = test_env(&mut state);
-            let mut dpe = DpeInstance::new(&mut env).unwrap();
+            let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
             let init_resp = match InitCtxCmd::new_use_default()
                 .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
@@ -280,7 +280,7 @@ mod tests {
             };
             let mut state = State::new(Support::CSR, flags);
             let mut env = test_env(&mut state);
-            let mut dpe = DpeInstance::new(&mut env).unwrap();
+            let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
             let init_resp = match InitCtxCmd::new_use_default()
                 .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
@@ -503,7 +503,7 @@ mod tests {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::X509 | Support::AUTO_INIT, DpeFlags::empty());
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         // Derive context twice with different types
         let derive_cmd = DeriveContextCmd {

@@ -85,7 +85,7 @@ mod tests {
         CfiCounter::reset_for_test();
         let mut state = test_state();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         assert_eq!(
             Err(DpeErrorCode::InvalidArgument),

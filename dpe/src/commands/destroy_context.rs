@@ -136,7 +136,7 @@ mod tests {
         CfiCounter::reset_for_test();
         let mut state = State::default();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         InitCtxCmd::new_use_default()
             .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
@@ -291,7 +291,7 @@ mod tests {
         CfiCounter::reset_for_test();
         let mut state = test_state();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         // create new context while preserving auto-initialized context
         let handle_1 = match (DeriveContextCmd {
@@ -362,7 +362,7 @@ mod tests {
         CfiCounter::reset_for_test();
         let mut state = test_state();
         let mut env = test_env(&mut state);
-        let mut dpe = DpeInstance::new(&mut env).unwrap();
+        let mut dpe = DpeInstance::new().initialize(&mut env).unwrap();
 
         // create new context while preserving auto-initialized context
         let parent_handle = match (DeriveContextCmd {
