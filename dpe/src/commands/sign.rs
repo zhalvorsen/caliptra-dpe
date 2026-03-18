@@ -10,9 +10,8 @@ use crate::{
 use bitflags::bitflags;
 #[cfg(feature = "cfi")]
 use caliptra_cfi_derive::cfi_impl_fn;
-use caliptra_cfi_lib::cfi_launder;
 #[cfg(feature = "cfi")]
-use caliptra_cfi_lib::{cfi_assert, cfi_assert_bool, cfi_assert_ne};
+use caliptra_cfi_lib::cfi_assert_ne;
 #[cfg(any(feature = "p256", feature = "p384"))]
 use caliptra_dpe_crypto::ecdsa::EcdsaSignature;
 use caliptra_dpe_crypto::{Crypto, SignData, Signature};
@@ -182,20 +181,11 @@ fn sign(
     data: &SignData,
 ) -> Result<Signature, DpeErrorCode> {
     let cdi_digest = dpe.compute_measurement_hash(env, idx)?;
-    let cdi = env.crypto.derive_cdi(&cdi_digest, b"DPE")?;
     let profile = dpe.profile;
     let context = profile.key_context();
-    let key_pair = env.crypto.derive_key_pair(&cdi, label, context);
-    if cfi_launder(key_pair.is_ok()) {
-        #[cfg(feature = "cfi")]
-        cfi_assert!(key_pair.is_ok());
-    } else {
-        #[cfg(feature = "cfi")]
-        cfi_assert!(key_pair.is_err());
-    }
-    let (priv_key, pub_key) = key_pair?;
-
-    Ok(env.crypto.sign_with_derived(data, &priv_key, &pub_key)?)
+    Ok(env
+        .crypto
+        .sign_with_derived(&cdi_digest, b"DPE", label, context, data)?)
 }
 
 #[repr(C)]
