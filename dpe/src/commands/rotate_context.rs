@@ -2,7 +2,7 @@
 use super::CommandExecution;
 use crate::{
     context::{ContextHandle, ContextState},
-    dpe_instance::{DpeEnv, DpeInstance, DpeTypes},
+    dpe_instance::{DpeEnv, DpeInstance},
     mutresp,
     response::{DpeErrorCode, NewHandleResp},
     State,
@@ -84,7 +84,7 @@ impl CommandExecution for RotateCtxCmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -136,7 +136,8 @@ mod tests {
     use crate::{
         commands::{tests::PROFILES, Command, CommandHdr, InitCtxCmd},
         dpe_instance::tests::{
-            test_env, DPE_PROFILE, RANDOM_HANDLE, SIMULATION_HANDLE, TEST_HANDLE, TEST_LOCALITIES,
+            new_crypto, test_state, DPE_PROFILE, RANDOM_HANDLE, SIMULATION_HANDLE, TEST_HANDLE,
+            TEST_LOCALITIES,
         },
         response::Response,
         support::Support,
@@ -169,7 +170,13 @@ mod tests {
     fn test_rotate_context() {
         CfiCounter::reset_for_test();
         let mut state = State::default();
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
         // Make sure it returns an error if the command is marked unsupported.
         assert_eq!(

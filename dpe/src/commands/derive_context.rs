@@ -3,7 +3,7 @@ use super::CommandExecution;
 use crate::{
     commands::destroy_context,
     context::{ActiveContextArgs, Context, ContextHandle, ContextState, ContextType},
-    dpe_instance::{DpeEnv, DpeInstance, DpeTypes},
+    dpe_instance::{DpeEnv, DpeInstance},
     mutresp, okref,
     response::{DeriveContextExportedCdiResp, DeriveContextResp, DpeErrorCode},
     tci::TciMeasurement,
@@ -17,8 +17,6 @@ use caliptra_cfi_derive::cfi_impl_fn;
 use caliptra_cfi_lib::{cfi_assert, cfi_assert_bool, cfi_assert_eq};
 use cfg_if::cfg_if;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
-
-use caliptra_dpe_platform::Platform;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
@@ -191,7 +189,7 @@ impl CommandExecution for DeriveContextCmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -435,8 +433,10 @@ impl Default for DeriveContextCmd {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+    use caliptra_dpe_crypto::CryptoSuite;
+
     #[cfg(feature = "ml-dsa")]
     use crate::commands::{sign::SignMldsa87Cmd as SignCmd, CertifyKeyMldsa87Cmd as CertifyKeyCmd};
     #[cfg(feature = "p256")]
@@ -451,7 +451,7 @@ mod tests {
         },
         context::ContextType,
         dpe_instance::tests::{
-            test_env, TestTypes, DPE_PROFILE, RANDOM_HANDLE, SIMULATION_HANDLE, TEST_LOCALITIES,
+            new_crypto, test_state, DPE_PROFILE, RANDOM_HANDLE, SIMULATION_HANDLE, TEST_LOCALITIES,
         },
         response::{NewHandleResp, Response, SignResp},
         support::Support,
@@ -460,7 +460,7 @@ mod tests {
     };
     use caliptra_cfi_lib::CfiCounter;
     use caliptra_dpe_crypto::Crypto;
-    use caliptra_dpe_platform::{Platform, MAX_KEY_IDENTIFIER_SIZE};
+    use caliptra_dpe_platform::MAX_KEY_IDENTIFIER_SIZE;
     use openssl::{
         bn::BigNum,
         ecdsa::EcdsaSig,
@@ -501,7 +501,13 @@ mod tests {
             Support::AUTO_INIT | Support::INTERNAL_INFO | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         assert_eq!(
@@ -548,7 +554,13 @@ mod tests {
     fn test_initial_conditions() {
         CfiCounter::reset_for_test();
         let mut state = State::default();
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         InitCtxCmd::new_use_default()
@@ -566,7 +578,13 @@ mod tests {
     fn test_max_tcis() {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::AUTO_INIT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Fill all contexts with children (minus the auto-init context).
@@ -590,7 +608,13 @@ mod tests {
     fn test_set_child_parent_relationship() {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::AUTO_INIT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let parent_idx = env
@@ -627,7 +651,13 @@ mod tests {
     fn test_set_other_values() {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::AUTO_INIT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         DeriveContextCmd {
@@ -653,7 +683,13 @@ mod tests {
     fn test_correct_child_handle() {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::AUTO_INIT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Make sure child handle is default when creating default child.
@@ -693,7 +729,13 @@ mod tests {
                 | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let handle = match (RotateCtxCmd {
@@ -828,7 +870,13 @@ mod tests {
             Support::AUTO_INIT | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Make sure the parent handle is non-sense when not retaining.
@@ -956,7 +1004,13 @@ mod tests {
             Support::AUTO_INIT | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         assert_eq!(
@@ -976,7 +1030,13 @@ mod tests {
             Support::AUTO_INIT | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         DeriveContextCmd {
@@ -1013,7 +1073,13 @@ mod tests {
                 | Support::INTERNAL_INFO,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         assert_eq!(
@@ -1096,7 +1162,13 @@ mod tests {
                 | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // When `DeriveContextFlags::EXPORT_CDI` is set, `DeriveContextFlags::CREATE_CERTIFICATE` MUST
@@ -1233,7 +1305,13 @@ mod tests {
                 | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let Ok(Response::DeriveContext(DeriveContextResp { handle, .. })) = DeriveContextCmd {
@@ -1276,7 +1354,13 @@ mod tests {
                 | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // When `DeriveContextFlags::RETAIN_PARENT_CONTEXT` a new handle to the parent should be
@@ -1368,7 +1452,13 @@ mod tests {
             Support::AUTO_INIT | Support::CDI_EXPORT | Support::X509,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let res = DeriveContextCmd {
@@ -1417,7 +1507,13 @@ mod tests {
             Support::AUTO_INIT | Support::CDI_EXPORT | Support::X509,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let res = DeriveContextCmd {
@@ -1455,7 +1551,13 @@ mod tests {
                 | Support::RETAIN_PARENT_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let res = DeriveContextCmd {
@@ -1503,7 +1605,13 @@ mod tests {
                 | Support::ROTATE_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // We want to use multiple contexts, so rotate out the default handle for a new handle.
@@ -1602,7 +1710,13 @@ mod tests {
                 | Support::ROTATE_CONTEXT,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // We want to use multiple contexts, so rotate out the default handle for a new handle.
@@ -1683,7 +1797,13 @@ mod tests {
                 flags
             };
             let mut state = State::new(Support::X509 | Support::CDI_EXPORT, flags);
-            let mut env = test_env(&mut state);
+            let mut crypto = new_crypto();
+            let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+            let mut env = DpeEnv {
+                crypto: &mut crypto,
+                platform: &mut platform,
+                state: &mut state,
+            };
             let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
             let init_resp = match InitCtxCmd::new_use_default()
@@ -1783,7 +1903,7 @@ mod tests {
 
     fn derive_context_and_check_active_child_count(
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<TestTypes>,
+        env: &mut DpeEnv,
         cmd: DeriveContextCmd,
         expected_active_child_count: usize,
     ) -> (ContextHandle, ContextHandle) {
@@ -1812,7 +1932,13 @@ mod tests {
     #[test]
     fn test_correct_subject_name_for_exported_cdi() {
         let mut state = State::new(Support::X509 | Support::CDI_EXPORT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         let init_resp = match InitCtxCmd::new_use_default()

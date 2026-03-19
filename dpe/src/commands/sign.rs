@@ -2,7 +2,7 @@
 use super::CommandExecution;
 use crate::{
     context::{ContextHandle, ContextType},
-    dpe_instance::{DpeEnv, DpeInstance, DpeTypes},
+    dpe_instance::{DpeEnv, DpeInstance},
     mutresp, okref,
     response::DpeErrorCode,
     DpeProfile,
@@ -14,7 +14,7 @@ use caliptra_cfi_derive::cfi_impl_fn;
 use caliptra_cfi_lib::cfi_assert_ne;
 #[cfg(any(feature = "p256", feature = "p384"))]
 use caliptra_dpe_crypto::ecdsa::EcdsaSignature;
-use caliptra_dpe_crypto::{Crypto, SignData, Signature};
+use caliptra_dpe_crypto::{SignData, Signature};
 use cfg_if::cfg_if;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
@@ -74,7 +74,7 @@ impl CommandExecution for SignCommand<'_> {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -175,7 +175,7 @@ impl CommandExecution for SignCommand<'_> {
 /// * `digest` - The data to be signed
 fn sign(
     dpe: &mut DpeInstance,
-    env: &mut DpeEnv<impl DpeTypes>,
+    env: &mut DpeEnv,
     idx: usize,
     label: &[u8],
     data: &SignData,
@@ -203,7 +203,7 @@ impl CommandExecution for SignP256Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -226,7 +226,7 @@ impl CommandExecution for SignP384Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -249,7 +249,7 @@ impl CommandExecution for SignMldsa87Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -274,7 +274,7 @@ mod tests {
             Command, CommandHdr, DeriveContextCmd, InitCtxCmd,
         },
         dpe_instance::tests::{
-            test_env, test_state, DPE_PROFILE, RANDOM_HANDLE, SIMULATION_HANDLE, TEST_LOCALITIES,
+            new_crypto, test_state, DPE_PROFILE, RANDOM_HANDLE, SIMULATION_HANDLE, TEST_LOCALITIES,
         },
         response::{Response, SignResp},
         tci::TciMeasurement,
@@ -321,7 +321,13 @@ mod tests {
     fn test_bad_command_inputs() {
         CfiCounter::reset_for_test();
         let mut state = test_state();
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Bad handle.
@@ -376,7 +382,13 @@ mod tests {
     fn test_asymmetric() {
         CfiCounter::reset_for_test();
         let mut state = test_state();
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         for i in 0..3 {

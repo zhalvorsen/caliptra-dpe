@@ -2,7 +2,7 @@
 use super::CommandExecution;
 use crate::{
     context::ContextHandle,
-    dpe_instance::{DpeEnv, DpeInstance, DpeTypes},
+    dpe_instance::{DpeEnv, DpeInstance},
     mutresp, okref,
     response::DpeErrorCode,
     x509::{create_dpe_cert, CreateDpeCertArgs, CreateDpeCertResult},
@@ -138,7 +138,7 @@ impl CommandExecution for CertifyKeyCommand<'_> {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -289,7 +289,7 @@ impl CommandExecution for CertifyKeyP256Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -323,7 +323,7 @@ impl CommandExecution for CertifyKeyP384Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -357,7 +357,7 @@ impl CommandExecution for CertifyKeyMldsa87Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv<impl DpeTypes>,
+        env: &mut DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -420,7 +420,9 @@ mod tests {
     use crate::commands::CertifyKeyP384Cmd as CertifyKeyCmd;
     use crate::{
         commands::{Command, CommandHdr, DeriveContextCmd, DeriveContextFlags, InitCtxCmd},
-        dpe_instance::tests::{test_env, DPE_PROFILE, SIMULATION_HANDLE, TEST_LOCALITIES},
+        dpe_instance::tests::{
+            new_crypto, test_state, DPE_PROFILE, SIMULATION_HANDLE, TEST_LOCALITIES,
+        },
         response::{CertifyKeyResp, Response},
         support::Support,
         tci::TciMeasurement,
@@ -493,7 +495,13 @@ mod tests {
                 flags
             };
             let mut state = State::new(Support::X509, flags);
-            let mut env = test_env(&mut state);
+            let mut crypto = new_crypto();
+            let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+            let mut env = DpeEnv {
+                crypto: &mut crypto,
+                platform: &mut platform,
+                state: &mut state,
+            };
             let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
             let init_resp = match InitCtxCmd::new_use_default()
@@ -550,7 +558,13 @@ mod tests {
                 flags
             };
             let mut state = State::new(Support::CSR, flags);
-            let mut env = test_env(&mut state);
+            let mut crypto = new_crypto();
+            let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+            let mut env = DpeEnv {
+                crypto: &mut crypto,
+                platform: &mut platform,
+                state: &mut state,
+            };
             let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
             let init_resp = match InitCtxCmd::new_use_default()
@@ -833,7 +847,13 @@ mod tests {
     fn test_certify_key_order() {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::X509 | Support::AUTO_INIT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Derive context twice with different types
@@ -887,7 +907,13 @@ mod tests {
     fn test_max_tcis_certify_key_x509() {
         CfiCounter::reset_for_test();
         let mut state = State::new(Support::X509 | Support::AUTO_INIT, DpeFlags::empty());
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Derive context MAX_HANDLES times. The first was already created by auto-init.
@@ -938,7 +964,13 @@ mod tests {
             Support::X509 | Support::AUTO_INIT | Support::CSR,
             DpeFlags::empty(),
         );
-        let mut env = test_env(&mut state);
+        let mut crypto = new_crypto();
+        let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
+        let mut env = DpeEnv {
+            crypto: &mut crypto,
+            platform: &mut platform,
+            state: &mut state,
+        };
         let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
 
         // Derive context MAX_HANDLES times. The first was already created by auto-init.
