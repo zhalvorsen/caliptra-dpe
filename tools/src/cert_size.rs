@@ -3,9 +3,11 @@
 use anyhow::{anyhow, Result};
 use caliptra_dpe::{
     commands::{CertifyKeyCommand, CommandExecution, DeriveContextCmd, DeriveContextFlags},
-    DpeFlags, DpeProfile, MAX_HANDLES,
+    DpeFlags, DpeProfile, MAX_HANDLES, State,
 };
 use caliptra_dpe::{dpe_instance::DpeEnv, response::Response, support::Support, DpeInstance};
+use caliptra_dpe_crypto::CryptoSuite;
+use caliptra_dpe_platform::Platform;
 use caliptra_dpe_platform::default::{DefaultPlatform, DefaultPlatformProfile};
 use clap::{Parser, ValueEnum};
 
@@ -75,6 +77,27 @@ impl From<Algorithm> for DpeProfile {
     }
 }
 
+struct CertSizeEnv<'a> {
+    crypto: &'a mut dyn CryptoSuite,
+    platform: &'a mut dyn Platform,
+    state: &'a mut State,
+}
+
+impl DpeEnv for CertSizeEnv<'_> {
+    fn crypto(&mut self) -> &mut dyn CryptoSuite {
+        self.crypto
+    }
+    fn platform(&mut self) -> &mut dyn Platform {
+        self.platform
+    }
+    fn state(&mut self) -> &mut State {
+        self.state
+    }
+    fn get(&mut self) -> (&mut dyn CryptoSuite, &mut dyn Platform, &mut State) {
+        (self.crypto, self.platform, self.state)
+    }
+}
+
 /// Starts a DPE simulator that will receive commands and send responses over unix streams.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -90,7 +113,7 @@ struct Args {
     cert: bool,
 }
 
-fn send_certify_key(dpe: &mut DpeInstance, env: &mut DpeEnv, args: &Args) -> Result<Response> {
+fn send_certify_key(dpe: &mut DpeInstance, env: &mut dyn DpeEnv, args: &Args) -> Result<Response> {
     let format = if args.cert {
         CertifyKeyCommand::FORMAT_X509
     } else {
@@ -116,7 +139,7 @@ fn send_certify_key(dpe: &mut DpeInstance, env: &mut DpeEnv, args: &Args) -> Res
     }
 }
 
-fn run(env: &mut DpeEnv, args: &Args) -> Result<()> {
+fn run(env: &mut dyn DpeEnv, args: &Args) -> Result<()> {
     let mut dpe = DpeInstance::new(env, args.algorithm.into())
         .map_err(|e| anyhow!("DPE error creating instance: {e:?}"))?;
 
@@ -175,23 +198,31 @@ fn main() -> Result<()> {
 
     match args.algorithm {
         #[cfg(any(feature = "p256", feature = "p384"))]
-        Algorithm::Ec => run(
-            &mut DpeEnv {
-                crypto: &mut ec::new_crypto(),
-                platform: &mut DefaultPlatform(args.algorithm.into()),
-                state: &mut state,
-            },
-            &args,
-        ),
+        Algorithm::Ec => {
+            let mut crypto = ec::new_crypto();
+            let mut platform = DefaultPlatform(args.algorithm.into());
+            run(
+                &mut CertSizeEnv {
+                    crypto: &mut crypto,
+                    platform: &mut platform,
+                    state: &mut state,
+                },
+                &args,
+            )
+        }
         #[cfg(feature = "ml-dsa")]
-        Algorithm::Mldsa => run(
-            &mut DpeEnv {
-                crypto: &mut caliptra_dpe_crypto::RustCryptoImpl::new_mldsa87(),
-                platform: &mut DefaultPlatform(DefaultPlatformProfile::Mldsa87),
-                state: &mut state,
-            },
-            &args,
-        ),
+        Algorithm::Mldsa => {
+            let mut crypto = caliptra_dpe_crypto::RustCryptoImpl::new_mldsa87();
+            let mut platform = DefaultPlatform(DefaultPlatformProfile::Mldsa87);
+            run(
+                &mut CertSizeEnv {
+                    crypto: &mut crypto,
+                    platform: &mut platform,
+                    state: &mut state,
+                },
+                &args,
+            )
+        }
         #[allow(unreachable_patterns)]
         _ => Err(anyhow!("Unsupported algorithm")),
     }

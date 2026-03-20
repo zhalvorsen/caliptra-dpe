@@ -30,7 +30,7 @@ impl CommandExecution for GetCertificateChainCmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv,
+        env: &mut dyn DpeEnv,
         _locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -42,7 +42,7 @@ impl CommandExecution for GetCertificateChainCmd {
 
         let mut cert_chunk = [0u8; MAX_CHUNK_SIZE];
         let len = env
-            .platform
+            .platform()
             .get_certificate_chain(self.offset, self.size, &mut cert_chunk)?;
         *response = GetCertificateChainResp {
             certificate_chain: cert_chunk,
@@ -58,7 +58,7 @@ mod tests {
     use super::*;
     use crate::{
         commands::{tests::PROFILES, Command, CommandHdr},
-        dpe_instance::tests::{new_crypto, test_state, DPE_PROFILE, TEST_LOCALITIES},
+        dpe_instance::tests::{new_crypto, test_state, TestEnv, DPE_PROFILE, TEST_LOCALITIES},
     };
     use caliptra_cfi_lib::CfiCounter;
     use zerocopy::IntoBytes;
@@ -91,7 +91,7 @@ mod tests {
         let mut state = test_state();
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,

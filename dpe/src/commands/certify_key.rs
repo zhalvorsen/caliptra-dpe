@@ -138,7 +138,7 @@ impl CommandExecution for CertifyKeyCommand<'_> {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv,
+        env: &mut dyn DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -150,17 +150,17 @@ impl CommandExecution for CertifyKeyCommand<'_> {
             #[cfg(feature = "ml-dsa")]
             CertifyKeyCommand::Mldsa87(cmd) => (&cmd.handle, cmd.format, cmd.label.as_slice()),
         };
-        let idx = env.state.get_active_context_pos(handle, locality)?;
-        let context = &env.state.contexts[idx];
+        let idx = env.state().get_active_context_pos(handle, locality)?;
+        let context = env.state().contexts[idx];
 
         if format == Self::FORMAT_X509 {
-            if !env.state.support.x509() {
+            if !env.state().support.x509() {
                 return Err(DpeErrorCode::ArgumentNotSupported);
             }
             if !context.allow_x509() {
                 return Err(DpeErrorCode::InvalidArgument);
             }
-        } else if format == Self::FORMAT_CSR && !env.state.support.csr() {
+        } else if format == Self::FORMAT_CSR && !env.state().support.csr() {
             return Err(DpeErrorCode::ArgumentNotSupported);
         }
 
@@ -171,9 +171,9 @@ impl CommandExecution for CertifyKeyCommand<'_> {
 
         cfg_if! {
             if #[cfg(feature = "cfi")] {
-                cfi_assert!(format != Self::FORMAT_X509 || env.state.support.x509());
+                cfi_assert!(format != Self::FORMAT_X509 || env.state().support.x509());
                 cfi_assert!(format != Self::FORMAT_X509 || context.allow_x509());
-                cfi_assert!(format != Self::FORMAT_CSR || env.state.support.csr());
+                cfi_assert!(format != Self::FORMAT_CSR || env.state().support.csr());
                 cfi_assert_eq(context.locality, locality);
             }
         }
@@ -187,7 +187,7 @@ impl CommandExecution for CertifyKeyCommand<'_> {
             context: profile.key_context(),
             ueid: label,
             dice_extensions_are_critical: env
-                .state
+                .state()
                 .flags
                 .contains(DpeFlags::MARK_DICE_EXTENSIONS_CRITICAL),
         };
@@ -268,7 +268,7 @@ impl CommandExecution for CertifyKeyCommand<'_> {
         let len = response.size()?;
         // Rotate handle if it isn't the default
         dpe.roll_onetime_use_handle(env, idx)?;
-        response.set_handle(env.state.contexts[idx].handle);
+        response.set_handle(env.state().contexts[idx].handle);
 
         Ok(len)
     }
@@ -289,7 +289,7 @@ impl CommandExecution for CertifyKeyP256Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv,
+        env: &mut dyn DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -323,7 +323,7 @@ impl CommandExecution for CertifyKeyP384Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv,
+        env: &mut dyn DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -357,7 +357,7 @@ impl CommandExecution for CertifyKeyMldsa87Cmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv,
+        env: &mut dyn DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
@@ -421,7 +421,7 @@ mod tests {
     use crate::{
         commands::{Command, CommandHdr, DeriveContextCmd, DeriveContextFlags, InitCtxCmd},
         dpe_instance::tests::{
-            new_crypto, test_state, DPE_PROFILE, SIMULATION_HANDLE, TEST_LOCALITIES,
+            new_crypto, TestEnv, DPE_PROFILE, SIMULATION_HANDLE, TEST_LOCALITIES,
         },
         response::{CertifyKeyResp, Response},
         support::Support,
@@ -434,9 +434,8 @@ mod tests {
     use caliptra_dpe_crypto::ml_dsa::{MldsaAlgorithm, MldsaPublicKey};
     use caliptra_dpe_crypto::{
         ecdsa::{EcdsaAlgorithm, EcdsaPub},
-        Crypto, CryptoSuite, PubKey, SignatureAlgorithm,
+        PubKey, SignatureAlgorithm,
     };
-    use caliptra_dpe_platform::Platform;
     use cms::{
         content_info::{CmsVersion, ContentInfo},
         signed_data::{SignedData, SignerIdentifier},
@@ -497,7 +496,7 @@ mod tests {
             let mut state = State::new(Support::X509, flags);
             let mut crypto = new_crypto();
             let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-            let mut env = DpeEnv {
+            let mut env = TestEnv {
                 crypto: &mut crypto,
                 platform: &mut platform,
                 state: &mut state,
@@ -560,7 +559,7 @@ mod tests {
             let mut state = State::new(Support::CSR, flags);
             let mut crypto = new_crypto();
             let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-            let mut env = DpeEnv {
+            let mut env = TestEnv {
                 crypto: &mut crypto,
                 platform: &mut platform,
                 state: &mut state,
@@ -849,7 +848,7 @@ mod tests {
         let mut state = State::new(Support::X509 | Support::AUTO_INIT, DpeFlags::empty());
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,
@@ -909,7 +908,7 @@ mod tests {
         let mut state = State::new(Support::X509 | Support::AUTO_INIT, DpeFlags::empty());
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,
@@ -966,7 +965,7 @@ mod tests {
         );
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,

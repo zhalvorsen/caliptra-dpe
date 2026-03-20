@@ -90,12 +90,12 @@ impl CommandExecution for DestroyCtxCmd {
     fn execute_serialized(
         &self,
         dpe: &mut DpeInstance,
-        env: &mut DpeEnv,
+        env: &mut dyn DpeEnv,
         locality: u32,
         out: &mut [u8],
     ) -> Result<usize, DpeErrorCode> {
         let response = mutresp::<ResponseHdr>(dpe.profile, out)?;
-        destroy_context(&self.handle, env.state, locality)?;
+        destroy_context(&self.handle, env.state(), locality)?;
         *response = dpe.response_hdr(DpeErrorCode::NoError);
         Ok(size_of_val(response))
     }
@@ -110,7 +110,8 @@ mod tests {
         },
         context::{Context, ContextState},
         dpe_instance::tests::{
-            new_crypto, test_state, DPE_PROFILE, SIMULATION_HANDLE, TEST_HANDLE, TEST_LOCALITIES,
+            new_crypto, test_state, TestEnv, DPE_PROFILE, SIMULATION_HANDLE, TEST_HANDLE,
+            TEST_LOCALITIES,
         },
         response::Response,
     };
@@ -142,7 +143,7 @@ mod tests {
         let mut state = State::default();
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,
@@ -163,8 +164,8 @@ mod tests {
         );
 
         // create two dummy contexts at indices 0 and 1, with 1 being the child of 0
-        activate_dummy_context(&mut env.state, 0, Context::ROOT_INDEX, &TEST_HANDLE, &[1]);
-        activate_dummy_context(&mut env.state, 1, 0, &ContextHandle::default(), &[]);
+        activate_dummy_context(env.state(), 0, Context::ROOT_INDEX, &TEST_HANDLE, &[1]);
+        activate_dummy_context(env.state(), 1, 0, &ContextHandle::default(), &[]);
         // destroy context[1]
         assert_eq!(
             Ok(Response::DestroyCtx(
@@ -175,8 +176,8 @@ mod tests {
             }
             .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
         );
-        assert_eq!(env.state.contexts[1].state, ContextState::Inactive);
-        assert!(env.state.contexts[0].children.is_empty());
+        assert_eq!(env.state().contexts[1].state, ContextState::Inactive);
+        assert!(env.state().contexts[0].children.is_empty());
         // destroy context[0]
         assert_eq!(
             Ok(Response::DestroyCtx(
@@ -187,52 +188,52 @@ mod tests {
             }
             .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
         );
-        assert_eq!(env.state.contexts[0].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[0].state, ContextState::Inactive);
 
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             0,
             Context::ROOT_INDEX,
             &ContextHandle::default(),
             &[1, 2],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             1,
             0,
             &ContextHandle([1; ContextHandle::SIZE]),
             &[3, 4],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             2,
             0,
             &ContextHandle([2; ContextHandle::SIZE]),
             &[5, 6],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             3,
             1,
             &ContextHandle([3; ContextHandle::SIZE]),
             &[],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             4,
             1,
             &ContextHandle([4; ContextHandle::SIZE]),
             &[],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             5,
             2,
             &ContextHandle([5; ContextHandle::SIZE]),
             &[],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             6,
             2,
             &ContextHandle([6; ContextHandle::SIZE]),
@@ -249,34 +250,34 @@ mod tests {
             }
             .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
         );
-        assert_eq!(env.state.contexts[0].state, ContextState::Inactive);
-        assert_eq!(env.state.contexts[1].state, ContextState::Inactive);
-        assert_eq!(env.state.contexts[2].state, ContextState::Inactive);
-        assert_eq!(env.state.contexts[3].state, ContextState::Inactive);
-        assert_eq!(env.state.contexts[4].state, ContextState::Inactive);
-        assert_eq!(env.state.contexts[5].state, ContextState::Inactive);
-        assert_eq!(env.state.contexts[6].state, ContextState::Inactive);
-        assert!(env.state.contexts[0].children.is_empty());
-        assert!(env.state.contexts[1].children.is_empty());
-        assert!(env.state.contexts[2].children.is_empty());
-        assert!(env.state.contexts[3].children.is_empty());
+        assert_eq!(env.state().contexts[0].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[1].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[2].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[3].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[4].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[5].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[6].state, ContextState::Inactive);
+        assert!(env.state().contexts[0].children.is_empty());
+        assert!(env.state().contexts[1].children.is_empty());
+        assert!(env.state().contexts[2].children.is_empty());
+        assert!(env.state().contexts[3].children.is_empty());
 
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             0,
             Context::ROOT_INDEX,
             &ContextHandle::default(),
             &[1, 2],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             1,
             0,
             &ContextHandle([1; ContextHandle::SIZE]),
             &[],
         );
         activate_dummy_context(
-            &mut env.state,
+            env.state(),
             2,
             0,
             &ContextHandle([2; ContextHandle::SIZE]),
@@ -292,9 +293,9 @@ mod tests {
             }
             .execute(&mut dpe, &mut env, TEST_LOCALITIES[0])
         );
-        assert_eq!(env.state.contexts[1].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[1].state, ContextState::Inactive);
         // check that context[2] is still a child of context[0]
-        assert_eq!(env.state.contexts[0].children.bits(), 1 << 2);
+        assert_eq!(env.state().contexts[0].children.bits(), 1 << 2);
     }
 
     #[test]
@@ -303,7 +304,7 @@ mod tests {
         let mut state = test_state();
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,
@@ -357,12 +358,12 @@ mod tests {
         // destroyed since they are in the chain of consecutive retired parents of the destroyed
         // context.
         assert_eq!(
-            env.state
+            env.state()
                 .count_contexts(|ctx| ctx.state != ContextState::Inactive)
                 .unwrap(),
             1
         );
-        assert_eq!(env.state.contexts[2].state, ContextState::Inactive);
+        assert_eq!(env.state().contexts[2].state, ContextState::Inactive);
     }
 
     #[test]
@@ -371,7 +372,7 @@ mod tests {
         let mut state = test_state();
         let mut crypto = new_crypto();
         let mut platform = crate::commands::tests::DEFAULT_PLATFORM;
-        let mut env = DpeEnv {
+        let mut env = TestEnv {
             crypto: &mut crypto,
             platform: &mut platform,
             state: &mut state,
@@ -425,12 +426,12 @@ mod tests {
         // Since the retired handle has another active context apart from handle_b, it
         // shouldn't be destroyed.
         assert_eq!(
-            env.state
+            env.state()
                 .count_contexts(|ctx| ctx.state != ContextState::Inactive)
                 .unwrap(),
             3
         );
-        assert_eq!(env.state.contexts[1].state, ContextState::Retired);
+        assert_eq!(env.state().contexts[1].state, ContextState::Retired);
     }
 
     fn activate_dummy_context(

@@ -2,6 +2,8 @@
 
 use caliptra_dpe::{tci::TciMeasurement, DpeFlags};
 use caliptra_dpe_platform::default::DefaultPlatformProfile;
+use caliptra_dpe_crypto::CryptoSuite;
+use caliptra_dpe_platform::Platform;
 use clap::{Parser, ValueEnum};
 use profile::*;
 use {
@@ -48,13 +50,34 @@ mod profile {
     }
 }
 
+pub struct ToolsEnv<'a> {
+    pub crypto: &'a mut dyn CryptoSuite,
+    pub platform: &'a mut dyn Platform,
+    pub state: &'a mut caliptra_dpe::State,
+}
+
+impl DpeEnv for ToolsEnv<'_> {
+    fn crypto(&mut self) -> &mut dyn CryptoSuite {
+        self.crypto
+    }
+    fn platform(&mut self) -> &mut dyn Platform {
+        self.platform
+    }
+    fn state(&mut self) -> &mut caliptra_dpe::State {
+        self.state
+    }
+    fn get(&mut self) -> (&mut dyn CryptoSuite, &mut dyn Platform, &mut caliptra_dpe::State) {
+        (self.crypto, self.platform, self.state)
+    }
+}
+
 pub struct TestTypes {}
 
 // Call DeriveContext on the default context so the generated cert will have a
 // TcbInfo populated.
 fn add_tcb_info(
     dpe: &mut DpeInstance,
-    env: &mut DpeEnv,
+    env: &mut dyn DpeEnv,
     data: &TciMeasurement,
     tci_type: u32,
     svn: u32,
@@ -85,7 +108,7 @@ fn add_tcb_info(
     };
 }
 
-fn certify_key(dpe: &mut DpeInstance, env: &mut DpeEnv, format: u32) -> Vec<u8> {
+fn certify_key(dpe: &mut DpeInstance, env: &mut dyn DpeEnv, format: u32) -> Vec<u8> {
     let certify_key_cmd = CertifyKeyCmd {
         handle: ContextHandle::default(),
         flags: CertifyKeyFlags::empty(),
@@ -143,10 +166,13 @@ fn main() {
         DpeFlags::empty()
     };
 
-    let mut env = DpeEnv {
-        crypto: &mut profile::new_crypto(),
-        platform: &mut DefaultPlatform(PLATFORM_PROFILE),
-        state: &mut caliptra_dpe::State::new(support, flags),
+    let mut crypto = profile::new_crypto();
+    let mut platform = DefaultPlatform(PLATFORM_PROFILE);
+    let mut state = caliptra_dpe::State::new(support, flags);
+    let mut env = ToolsEnv {
+        crypto: &mut crypto,
+        platform: &mut platform,
+        state: &mut state,
     };
 
     let mut dpe = DpeInstance::new(&mut env, DPE_PROFILE).unwrap();
